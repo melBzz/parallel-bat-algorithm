@@ -176,6 +176,11 @@ On fait ici des **hypothèses simplificatrices** sur le comportement réel des c
 - et sait si elle se rapproche du **but** (*optimum global*).  
 
 ---
+Chaque chauve-souris :
+
+- a une vitesse **vᵢ** et une position **xᵢ** dans l’espace de recherche,
+- émet à une fréquence initiale **f_min** (liée à la longueur d’onde λ),
+- a une intensité sonore initiale **A₀**.
 
 À **chaque itération**, la chauve-souris peut :  
 - **ajuster sa fréquence** → changer la manière dont elle explore l’espace de recherche ;  

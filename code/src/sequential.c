@@ -7,10 +7,10 @@
 #include "bat_utils.h"
 
 #define N_BATS     30
-#define MAX_ITERS  1000
+#define MAX_ITERS  10000
 
 #define F_MIN      0.0
-#define F_MAX      2.0
+#define F_MAX      1.0
 
 #define A0         1.0    // initial loudness
 #define R0         1.0    // initial pulse rate
@@ -19,8 +19,38 @@
 #define ALPHA      0.97
 #define GAMMA      0.1
 
-#define Ub         -5
-#define Lb         5
+#define Ub         5
+#define Lb         -5
+
+// ------- FONCTION SNAPSHOT ------------------------------------
+void save_snapshot(const char *filename, Bat bats[]) {
+    FILE *fp = fopen(filename, "w");
+    if (!fp) {
+        perror("fopen snapshot");
+        return;
+    }
+
+    for (int i = 0; i < N_BATS; i++) {
+        for (int d = 0; d < dimension; d++) {
+            fprintf(fp, (d == 0) ? "%f" : ",%f", bats[i].x_i[d]);
+        }
+        fprintf(fp, "\n");
+    }
+
+    fclose(fp);
+}
+
+// -----------------------------------------------------------------
+
+
+
+
+
+double compute_A_mean(Bat bats[]) {
+    double sum = 0.0;
+    for (int k = 0; k < N_BATS; k++) sum += bats[k].A_i;
+    return sum / N_BATS;
+}
 
 // Initialize the bat population and find an initial best bat
 void initialize_bats(Bat bats[], Bat *best_bat) {
@@ -29,7 +59,7 @@ void initialize_bats(Bat bats[], Bat *best_bat) {
 
         // x_i and v_i
         for (int d = 0; d < dimension; d++) {
-            bats[i].x_i[d] = normal_random(0.0, 1.0); // N(0,1)
+            bats[i].x_i[d] = uniform_random(-5.0, 5.0); // N(0,1)
             bats[i].v_i[d] = V0;
         }
 
@@ -54,9 +84,8 @@ void initialize_bats(Bat bats[], Bat *best_bat) {
     *best_bat = bats[best_index];  // copy best bat
 }
 
-
 void update_bat(Bat bats[], Bat *best_bat, int i, int t) {
-
+    
     // 1. Update frequency
     double beta = uniform_random(0.0, 1.0);
     bats[i].f_i = F_MIN + (F_MAX - F_MIN) * beta;
@@ -91,10 +120,12 @@ void update_bat(Bat bats[], Bat *best_bat, int i, int t) {
 
         double local_x[dimension];
 
+        double A_mean = compute_A_mean(bats);
+
         // local random walk around global best
         for (int d = 0; d < dimension; d++) {
             double eps = normal_random(0.0, 1.0);       // randn(1,d)
-            local_x[d] = best_bat->x_i[d] + 0.1 * eps * bats[i].A_i;
+            local_x[d] = best_bat->x_i[d] + 0.1 * eps * A_mean;
 
             // borne la nouvelle solution 
             if (local_x[d] < Lb) local_x[d] = Lb;
@@ -148,6 +179,18 @@ int main(void) {
         for (int i = 0; i < N_BATS; i++) {
             update_bat(bats, &best_bat, i, t);
         }
+
+        /* snapshots aux itérations choisies */
+        if (t == 0) {
+            save_snapshot("snapshot_t000.csv", bats);
+        } else if (t == 2500) {
+            save_snapshot("snapshot_t250.csv", bats);
+        } else if (t == 5000) {
+            save_snapshot("snapshot_t500.csv", bats);
+        } else if (t == 7500) {
+            save_snapshot("snapshot_t750.csv", bats);
+        }
+
 
         // afficher toutes les 100 itérations
         if (t % 100 == 0) {

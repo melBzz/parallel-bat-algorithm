@@ -146,7 +146,15 @@ Initialement, **chaque bat tire une fréquence aléatoire entre \(f_{\min}\) et 
 
 
 
+Implémentation séquentiel : 
 
+
+
+
+
+
+
+---
 
 Algorithm 11.1: Bat algorithm.
 

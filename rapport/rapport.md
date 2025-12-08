@@ -57,29 +57,34 @@ Dans ce modèle, chaque bat est représentée par un ensemble de paramètres :
 - une loudness \(A_i\) ;
 - un pulse rate \(r_i\).
 
-Les équations de mise à jour proposées par Yang pour la fréquence, la vitesse et la position sont les suivantes :contentReference[oaicite:0]{index=0} :
+Les équations de mise à jour du Bat Algorithm décrites par Yang sont les suivantes.  
+La fréquence est mise à jour selon :
 
-\[
-f_i = f_{\min} + (f_{\max} - f_{\min}) \, \beta,
-\]
+**(11.1)** \( f_i = f_{\min} + (f_{\max} - f_{\min}) \, \beta \),
 
-\[
-v_i^{t} = v_i^{t-1} + (x_i^{t-1} - x^*) \, f_i,
-\]
+où \( \beta \in [0,1] \) est un nombre aléatoire tiré d’une loi uniforme.
 
-\[
-x_i^{t} = x_i^{t-1} + v_i^{t},
-\]
+La vitesse est ensuite modifiée en fonction de la position actuelle de la chauve-souris par rapport à la meilleure solution courante \(x_*\) :
 
-où \(\beta \in [0,1]\) est un nombre aléatoire uniforme et \(x^*\) désigne la meilleure solution courante (global best). Ces mises à jour définissent le mouvement des bats dans l’espace de recherche et assurent l’exploration globale du domaine.
+**(11.2)** \( v_i^{t+1} = v_i^{t} + (x_i^{t} - x_*) \, f_i \).
 
-En phase de recherche locale, l’algorithme génère une nouvelle position par un déplacement aléatoire autour de la solution courante sélectionnée, avec une amplitude contrôlée par la loudness moyenne.
+La nouvelle position est enfin obtenue par :
 
-\[
-x_{\text{new}} = x_{\text{old}} + \varepsilon A^{t},
-\]
+**(11.3)** \( x_i^{t+1} = x_i^{t} + v_i^{t+1} \).
 
-où \(\varepsilon \in [-1, 1]\) est un terme aléatoire et \(A^{t}\) représente la loudness moyenne de la population à l’itération \(t\). Cette étape correspond à la phase d’exploitation locale.
+Ces trois équations définissent le *global update*, responsable de la phase d’exploration du domaine de recherche.
+
+Pour la recherche locale, Yang introduit un déplacement aléatoire contrôlé par la loudness moyenne \(A^{(t)}\), ce qui donne :
+
+**(11.4)** \( x_{\text{new}} = x_{\text{old}} + \varepsilon \, A^{(t)} \),
+
+où \( \varepsilon \in [-1, 1] \) est un terme aléatoire. D’un point de vue implémentation, comme le souligne Yang (*“From the implementation point of view, it is better to provide a scaling parameter to control the step size”*), cette équation est réécrite en utilisant un bruit gaussien associé à un facteur d’échelle \(\sigma\).
+
+
+**(11.5)** \( x_{\text{new}} = x_{\text{old}} + \sigma \, \varepsilon_t \, A^{(t)} \),
+
+où \( \varepsilon_t \) est tiré d’une loi normale \(N(0,1)\).  N(0,1)\) et \(\sigma = 0.1\) dans la démonstration fournie par Yang.  
+Cette étape constitue le *local search*, qui permet d’explorer le voisinage des meilleures solutions identifiées.
 
 La dynamique d’adaptation de la loudness et du pulse rate est modélisée par :
 
@@ -254,3 +259,94 @@ Dans notre implémentation séquentielle en C, nous avons choisi d’adopter une
 puis nous évaluons les deux et retenons la meilleure.
 
 Cette distinction explicite améliore la lisibilité algorithmique et clarifie le rôle respectif du mouvement global et de la recherche locale, tout en restant cohérente avec le fonctionnement général décrit dans l’article de Yang.
+
+**Choix d’implémentation**
+
+L’implémentation séquentielle du Bat Algorithm que nous proposons s’appuie directement sur les éléments fournis dans l’article original de Xin-She Yang (2010), l’implémentation MATLAB publiée dans Nature-Inspired Optimization Algorithms (Elsevier, 2014), ainsi que sur la seconde édition de l’ouvrage (Elsevier, 2020), qui explicite notamment les équations internes et le comportement des paramètres. Notre version en C suit ces sources lorsqu’elles sont précises, et adopte des choix complémentaires lorsque Yang ne détaille pas certains aspects pratiques.
+
+Les équations fondamentales du Bat Algorithm sont présentées dans le livre 2020 sous la forme  
+“\(f_i = f_{\min} + (f_{\max} - f_{\min}) \, \beta\) (11.1)”,  
+“\(v_i^{t+1} = v_i^t + (x_i^t - x)\, f_i\) (11.2)”,  
+“\(x_i^{t+1} = x_i^t + v_i^{t+1}\) (11.3)”.
+
+Nous reprenons directement les équations (11.1) et (11.3). En revanche, pour la mise à jour de la vitesse, nous utilisons la forme orientée vers la meilleure solution, c’est-à-dire \((x - x_i^t)\), conformément aux choix que nous avons déjà explicités et justifiés plus tôt concernant les incohérences de signe présentes dans les ouvrages de Yang.
+
+**Choix de la fréquence** 
+
+Dans les ouvrages de Yang, la fréquence maximale est décrite comme devant rester « de l’ordre de 1 » (“f_max = O(1)”, Yang 2020), sans valeur imposée. Le code MATLAB utilise \(f_{\max} = 2\) à titre d’exemple illustratif. On pense qu'il s’explique par la fonction objectif retenue dans son exemple :
+
+\[
+Fun(x) = \sum (x - 2)^2,
+\]
+
+Dans cet exemple, l’initialisation uniforme dans un domaine large \([-10,10]^5\) produit le plus souvent des solutions éloignées de l’optimum \(x^* = (2,\dots,2)\). Une fréquence maximale plus élevée augmente alors l’amplitude des déplacements initiaux, ce qui facilite l’exploration du domaine et permet d’atteindre plus rapidement la région contenant l’optimum.
+
+Dans notre cas, l’objectif à optimiser est la fonction :
+
+\[
+f(x) = 10 - \sum x_d^2,
+\]
+
+qui présente un maximum unique au centre du domaine. Une fréquence excessive produirait des déplacements trop brusques et des oscillations inutiles autour de l’optimum, tandis qu’une fréquence trop faible ralentirait la convergence.
+
+Pour cette raison, nous avons retenu une valeur plus conservatrice :
+
+\[
+f_{\max} = 1,
+\]
+
+qui reste compatible avec les recommandations générales de Yang tout en offrant une dynamique plus stable dans un domaine borné et symétrique comme \([−5,5]\). Ce choix permet des déplacements suffisamment rapides en début d’exploration, sans compromettre la précision en fin de convergence.
+
+Une alternative intéressante, que nous n’avons pas retenue ici, serait d’utiliser un \(f_{\max}\) adaptatif, par exemple décroissant au cours du temps. Cela offrirait une exploration large au début (fréquence élevée), puis un affinement progressif autour du maximum à mesure que l’algorithme avance. On pense que cette stratégie pourrait améliorer l’équilibre entre exploration et exploitation, aussi bien dans des cas simples comme le nôtre que pour des fonctions plus complexes.
+
+
+
+Pour la mise à jour de la loudness et du pulse rate, nous suivons l’équation (11.6) du livre 2020 :  
+\(A_i^{t+1} = \alpha A_i^{t},\quad r_i^{t+1} = r_{0i} \left[ 1 - \exp(-\gamma t) \right]\).  
+L’auteur ajoute : *“We have used α = 0.97 and γ = 0.1 in our simulations”*. Nous reprenons donc ces valeurs, qui entraînent une décroissance de la loudness et une augmentation progressive du pulse rate au cours des itérations.  
+Le choix de \(A_0 = 1\) est également légitimé par le livre : *“For simplicity, we can also use A₀ = 1”*, tandis que pour \(r_0\), Yang indique qu’il peut être pris dans l’intervalle \((0, 1]\). Nous fixons \(R_0 = 1\) conformément aux recommandations de Yang et à la valeur utilisée dans son implémentation MATLAB.
+
+Concernant la taille de la population, le code MATLAB spécifie : *“Population size, typically 10 to 50”*.  
+Le livre 2020 confirme cette plage : *“we use n = 10 to 50 virtual bats”*, tandis que le papier de 2010 note que *“sizes between 25 and 50 usually produce better results”*.  
+Notre choix de \(NBATS = 30\) correspond donc à la valeur centrale de l’intervalle recommandé.
+De même, nous reprenons la valeur \(MAX\_ITERS = 1000\) utilisée dans le code MATLAB. (*“t\_max = 1000”*).
+
+Dans ses exemples, Yang utilise généralement des bornes –10 et +10 : MATLAB fixe  
+\(\text{Lb} = -10 * \text{ones}(1,d),\quad \text{Ub} = 10 * \text{ones}(1,d)\),  
+et le livre 2020 réitère ce choix dans l’équation (11.9). Il insiste cependant sur le fait qu’il s’agit d’un choix de commodité : *“it is more convenient to impose some simple bounds in practice”*.  
+Comme notre fonction objectif est centrée et définie sur un domaine plus restreint, nous ajustons ces bornes à \([-5,5]\), ce qui limite l’exploration inutile et reste adapté à notre fonction objectif.
+
+Pour l’initialisation des solutions, Yang utilise une distribution uniforme dans MATLAB : “Sol(i,:) = Lb + (Ub - Lb) * rand(1,d)”. Dans le livre 2020, il ne prescrit aucune distribution particulière pour cette étape et indique simplement que “Initially, each bat is randomly assigned…”. Le papier de 2010 va dans le même sens en précisant que “Initially, each bat is randomly assigned a frequency which is drawn uniformly from [fmin, fmax]”, ce qui confirme que l’uniforme constitue le choix standard pour l’initialisation. Nous adoptons donc également une initialisation uniforme, adaptée à notre domaine \([-5,5]\), ce qui reste conforme au cadre théorique et cohérent avec l’implémentation MATLAB.
+
+Les ouvrages de Yang ne recommandent aucune structure de données particulière et MATLAB utilise des tableaux séparés. Nous avons choisi de regrouper les informations d’une chauve-souris dans une structure C
+
+Pour la recherche locale, nous utilisons une perturbation gaussienne, comme dans le code MATLAB de Yang où la mise à jour est donnée par “S(i,:) = best + 0.1 · randn(1,d) · A”. Le livre 2020 confirme ce choix en indiquant que “εᵗ is drawn from a Gaussian normal distribution N(0,1)”. Une loi normale génère surtout de petits déplacements autour du best, tout en permettant quelques variations plus larges, ce qui correspond bien au rôle du local search.
+
+
+Enfin, le livre 2020 distingue explicitement deux mécanismes :  
+(1) le *global update* (Eqs. 11.1–11.3), qui correspond au déplacement dirigé par la fréquence et la vitesse,  
+et  
+(2) le *local search* (Eqs. 11.4–11.5), qui consiste en une perturbation contrôlée autour d’une solution de référence.
+
+Dans le code MATLAB, cependant, le résultat du *global update* est directement remplacé par celui du *local search* lorsque la condition `rand > r` est satisfaite, sans comparaison entre les deux solutions. Par ailleurs, alors que MATLAB utilise une loudness unique et globale, nous introduisons la loudness moyenne telle que proposée dans l’équation (11.5), afin de nous rapprocher davantage du pseudo-code du livre, où le *local search* s’appuie sur un paramètre reflétant l’état global de la population.
+
+Dans notre implémentation, nous traitons ces deux mécanismes de façon distincte : lorsqu’un *local search* est déclenché, nous générons d’un côté la solution issue du *global update* et, de l’autre, la solution issue du *local search*. Les deux sont évaluées, puis seule la meilleure est transmise à la règle d’acceptation. Cette démarche clarifie le rôle respectif du *global update* et du *local search*, conformément à leur présentation comme deux sources de variation séparées dans le livre et dans le papier original.
+
+
+
+
+
+
+
+
+
+
+
+
+
+---
+
+A FAIRE 
+- travailler les citations (pas clair)
+- inserer le code sequentiel
+
