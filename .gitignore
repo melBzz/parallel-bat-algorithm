@@ -1,4 +1,4 @@
 # Folders #
-.vscode
-venv
-env
+.vscode/
+venv/
+env/
