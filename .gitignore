@@ -2,3 +2,10 @@
 .vscode/
 venv/
 env/
+
+# Files #
+sequential
+sequential.exe
+*.csv
+obj/*.o
+project_evaluation.pdf
