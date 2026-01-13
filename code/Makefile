@@ -9,7 +9,7 @@ OBJ_DIR = obj
 INC_DIR = include
 
 # Core objects (shared)
-CORE_OBJS = $(OBJ_DIR)/bat_core.o $(OBJ_DIR)/bat_utils.o
+CORE_OBJS = $(OBJ_DIR)/bat_core.o $(OBJ_DIR)/bat_utils.o $(OBJ_DIR)/bat_rng.o
 
 # Targets
 SEQ_TARGET = sequential
@@ -39,6 +39,10 @@ $(OBJ_DIR)/bat_core.o: $(SRC_DIR)/bat_core.c $(INC_DIR)/bat.h $(INC_DIR)/bat_uti
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(OBJ_DIR)/bat_utils.o: $(SRC_DIR)/bat_utils.c $(INC_DIR)/bat.h $(INC_DIR)/bat_utils.h
+	@mkdir -p $(OBJ_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(OBJ_DIR)/bat_rng.o: $(SRC_DIR)/bat_rng.c $(INC_DIR)/bat_rng.h
 	@mkdir -p $(OBJ_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 

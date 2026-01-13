@@ -20,6 +20,12 @@ Key ideas / conventions used by this script:
     - Speedup: S(p) = T1 / Tp
     - Efficiency: E(p) = S(p) / p
 
+    In addition to the sequential baseline, we also compute a *self baseline*
+    for each parallel version:
+        T_self1 = Tp at p=1 for the same version (MPI with 1 rank, OpenMP with 1 thread)
+    This avoids misleading results when sequential and parallel programs have
+    different overheads.
+
 - Weak scaling (problem size grows with p):
     - In our benchmarks we typically set n_bats = base_n_bats * p
     - Baseline time is the p=1 run at the smallest n_bats for that iters
@@ -29,9 +35,12 @@ Key ideas / conventions used by this script:
         (no division by p)
 
 Plotting notes:
+- We generate *combined* comparison plots (sequential vs OpenMP vs MPI) to keep
+    the number of figures small.
 - We skip plots with only 1 point (they are not informative).
-- Efficiency can be slightly > 1 in practice because the baseline (sequential)
-    and the parallel program (MPI/OpenMP) have different overheads and timing noise.
+- Efficiency can be slightly > 1 vs the sequential baseline due to noise and
+    because sequential vs MPI/OpenMP have different overheads. The self-baseline
+    plots are usually the safest to discuss in the report.
 """
 
 from __future__ import annotations
@@ -115,6 +124,14 @@ def find_baseline(rows: List[BenchRow], n_bats: int, iters: int) -> float:
     return min(r.time_s for r in candidates)
 
 
+def find_self_baseline(rows: List[BenchRow], version: str, n_bats: int, iters: int) -> Optional[float]:
+    """Self baseline for a version: Tp at p=1 for the same (n_bats, iters)."""
+    candidates = [r for r in rows if r.version == version and r.n_bats == n_bats and r.iters == iters and r.p == 1]
+    if not candidates:
+        return None
+    return min(r.time_s for r in candidates)
+
+
 def _strong_metrics(rows: List[BenchRow]) -> List[Dict[str, object]]:
     """Strong scaling: fixed (n_bats, iters), baseline is sequential with same size."""
     out: List[Dict[str, object]] = []
@@ -153,10 +170,22 @@ def _strong_metrics(rows: List[BenchRow]) -> List[Dict[str, object]]:
         key = (r.n_bats, r.iters)
         if key not in baselines:
             continue
-        t1 = baselines[key]
+
+        t_seq1 = baselines[key]
+        t_self1 = find_self_baseline(rows, r.version, r.n_bats, r.iters)
+        if t_self1 is None:
+            # If a version doesn't have p=1 data, we cannot compute self-baseline metrics.
+            t_self1 = t_seq1
+
         p = r.p
-        speedup = t1 / r.time_s if r.time_s > 0 else 0.0
-        eff = speedup / p if p > 0 else 0.0
+        speedup_seq = t_seq1 / r.time_s if r.time_s > 0 else 0.0
+        eff_seq = speedup_seq / p if p > 0 else 0.0
+        speedup_self = t_self1 / r.time_s if r.time_s > 0 else 0.0
+        eff_self = speedup_self / p if p > 0 else 0.0
+
+        # Backward-compatible aliases: treat speedup/efficiency as self-baseline.
+        speedup = speedup_self
+        eff = eff_self
         out.append(
             {
                 "mode": "strong",
@@ -168,9 +197,15 @@ def _strong_metrics(rows: List[BenchRow]) -> List[Dict[str, object]]:
                 "p": p,
                 "time_s": r.time_s,
                 "baseline_n_bats": r.n_bats,
-                "T_base_s": t1,
+                "T_base_s": t_seq1,
+                "T_seq1_s": t_seq1,
+                "T_self1_s": t_self1,
                 "speedup": speedup,
                 "efficiency": eff,
+                "speedup_seq": speedup_seq,
+                "efficiency_seq": eff_seq,
+                "speedup_self": speedup_self,
+                "efficiency_self": eff_self,
             }
         )
     return out
@@ -208,19 +243,29 @@ def _weak_metrics(rows: List[BenchRow]) -> List[Dict[str, object]]:
             if version == "sequential":
                 continue
 
-            baseline = _weak_baseline(rows, iters, version)
+            baseline_seq = _weak_baseline(rows, iters, version)
+            baseline_self = _weak_baseline(rows, iters, version)
+            # For self baseline, prefer p=1 run of the same version.
+            same = [r for r in rows if r.iters == iters and r.version == version and r.p == 1]
+            if same:
+                baseline_self = min(same, key=lambda r: r.n_bats)
+
+            baseline = baseline_seq
             if baseline is None:
                 continue
 
-            t_base = baseline.time_s
+            t_base_seq = baseline.time_s
             base_n = baseline.n_bats
+            t_base_self = baseline_self.time_s if baseline_self is not None else t_base_seq
 
             candidates = [r for r in rows if r.iters == iters and r.version == version]
             for r in candidates:
                 p = r.p
-                weak_speedup = t_base / r.time_s if r.time_s > 0 else 0.0
-                # weak scaling "efficiency" is typically normalized by ideal constant time, so no /p here
-                weak_eff = weak_speedup
+                weak_eff_seq = t_base_seq / r.time_s if r.time_s > 0 else 0.0
+                weak_eff_self = t_base_self / r.time_s if r.time_s > 0 else 0.0
+
+                # For weak scaling, we store the usual constant-time metric into both
+                # speedup_* and efficiency_* for convenience.
                 out.append(
                     {
                         "mode": "weak",
@@ -232,9 +277,15 @@ def _weak_metrics(rows: List[BenchRow]) -> List[Dict[str, object]]:
                         "p": p,
                         "time_s": r.time_s,
                         "baseline_n_bats": base_n,
-                        "T_base_s": t_base,
-                        "speedup": weak_speedup,
-                        "efficiency": weak_eff,
+                        "T_base_s": t_base_seq,
+                        "T_seq1_s": t_base_seq,
+                        "T_self1_s": t_base_self,
+                        "speedup": weak_eff_self,
+                        "efficiency": weak_eff_self,
+                        "speedup_seq": weak_eff_seq,
+                        "efficiency_seq": weak_eff_seq,
+                        "speedup_self": weak_eff_self,
+                        "efficiency_self": weak_eff_self,
                     }
                 )
 
@@ -250,9 +301,15 @@ def _weak_metrics(rows: List[BenchRow]) -> List[Dict[str, object]]:
                     "p": 1,
                     "time_s": baseline.time_s,
                     "baseline_n_bats": base_n,
-                    "T_base_s": t_base,
+                    "T_base_s": t_base_seq,
+                    "T_seq1_s": t_base_seq,
+                    "T_self1_s": t_base_self,
                     "speedup": 1.0,
                     "efficiency": 1.0,
+                    "speedup_seq": 1.0,
+                    "efficiency_seq": 1.0,
+                    "speedup_self": 1.0,
+                    "efficiency_self": 1.0,
                 }
             )
 
@@ -285,86 +342,142 @@ def try_plot(metrics: List[Dict[str, object]], outdir: str) -> None:
         print("matplotlib not available; skipping plots. Install with: pip install matplotlib")
         return
 
-    def plot_group(mode: str, version: str, title_tag: str, ms: List[Dict[str, object]]) -> None:
+    def _series(ms: List[Dict[str, object]], ykey: str) -> Tuple[List[int], List[float]]:
         ms = sorted(ms, key=lambda x: int(x["p"]))
-        ps = [int(x["p"]) for x in ms]
-        times = [float(x["time_s"]) for x in ms]
-        speedups = [float(x["speedup"]) for x in ms]
-        effs = [float(x["efficiency"]) for x in ms]
-        t_base = float(ms[0].get("T_base_s", times[0]))
+        xs = [int(x["p"]) for x in ms]
+        ys = [float(x[ykey]) for x in ms]
+        return xs, ys
 
-        # Skip plots that would have only one point.
-        # Single-point plots usually mean we grouped weak-scaling results by
-        # (n_bats, iters), or the benchmark didn't run for multiple p values.
-        if len(set(ps)) < 2:
+    def plot_compare_strong(n_bats: int, iters: int, ms: List[Dict[str, object]]) -> None:
+        # Split by version
+        seq = [m for m in ms if m["version"] == "sequential"]
+        omp = [m for m in ms if m["version"] == "openmp"]
+        mpi = [m for m in ms if m["version"] == "mpi"]
+
+        # Need at least 2 points among parallel series to be meaningful
+        if len({int(m["p"]) for m in omp + mpi}) < 2:
             return
 
-        # Dynamic y-limits: efficiency can be slightly > 1 due to noise and
-        # baseline differences (sequential code path vs MPI/OpenMP code path).
-        eff_max = max(effs) if effs else 1.0
-        eff_top = max(1.05, eff_max * 1.05)
+        t_seq1 = float(seq[0]["T_seq1_s"]) if seq else float(ms[0].get("T_seq1_s", 0.0))
+        title_tag = f"nbats{n_bats}_it{iters}"
 
         # Time
         plt.figure()
-        plt.plot(ps, times, marker="o")
-        if mode == "weak":
-            plt.axhline(t_base, linestyle="--", linewidth=1.0, label="ideal (constant time)")
-            plt.legend()
+        if omp:
+            x, y = _series(omp, "time_s")
+            plt.plot(x, y, marker="o", label="OpenMP")
+        if mpi:
+            x, y = _series(mpi, "time_s")
+            plt.plot(x, y, marker="o", label="MPI")
+        if t_seq1 > 0:
+            plt.axhline(t_seq1, linestyle="--", linewidth=1.0, label="Sequential (p=1)")
         plt.xlabel("p (threads or MPI processes)")
         plt.ylabel("Execution time (s)")
-        plt.title(f"{version} {mode} scaling: {title_tag}")
-        plt.grid(True, alpha=0.3)
-        plt.savefig(os.path.join(outdir, f"{version}_{mode}_time_{title_tag}.png"), dpi=150, bbox_inches="tight")
-        plt.close()
-
-        # Speedup
-        plt.figure()
-        plt.plot(ps, speedups, marker="o", label="measured")
-        if mode == "strong":
-            plt.plot(ps, ps, linestyle="--", label="ideal")
-        else:
-            plt.plot(ps, [1.0 for _ in ps], linestyle="--", label="ideal (constant time)")
-        plt.xlabel("p (threads or MPI processes)")
-        plt.ylabel("Speedup")
-        plt.title(f"{version} {mode} speedup: {title_tag}")
+        plt.title(f"Strong scaling time: {title_tag}")
         plt.grid(True, alpha=0.3)
         plt.legend()
-        plt.savefig(os.path.join(outdir, f"{version}_{mode}_speedup_{title_tag}.png"), dpi=150, bbox_inches="tight")
+        plt.savefig(os.path.join(outdir, f"compare_strong_time_{title_tag}.png"), dpi=150, bbox_inches="tight")
         plt.close()
 
-        # Efficiency
+        def _plot_speed_eff(ykey: str, ylabel: str, filename: str, ideal: str) -> None:
+            plt.figure()
+            if omp:
+                x, y = _series(omp, ykey)
+                plt.plot(x, y, marker="o", label="OpenMP")
+            if mpi:
+                x, y = _series(mpi, ykey)
+                plt.plot(x, y, marker="o", label="MPI")
+            # Ideal line (strong scaling)
+            x_ideal = sorted({int(m["p"]) for m in omp + mpi})
+            if x_ideal:
+                if ideal == "p":
+                    plt.plot(x_ideal, x_ideal, linestyle="--", label="ideal")
+                elif ideal == "1":
+                    plt.plot(x_ideal, [1.0 for _ in x_ideal], linestyle="--", label="ideal")
+            plt.xlabel("p (threads or MPI processes)")
+            plt.ylabel(ylabel)
+            plt.title(f"Strong scaling {ylabel.lower()}: {title_tag}")
+            plt.grid(True, alpha=0.3)
+            plt.legend()
+            plt.savefig(os.path.join(outdir, filename), dpi=150, bbox_inches="tight")
+            plt.close()
+
+        # vs sequential baseline
+        _plot_speed_eff("speedup_seq", "Speedup (vs sequential)", f"compare_strong_speedup_vs_seq_{title_tag}.png", ideal="p")
+        _plot_speed_eff("efficiency_seq", "Efficiency (vs sequential)", f"compare_strong_efficiency_vs_seq_{title_tag}.png", ideal="1")
+
+        # vs self baseline
+        _plot_speed_eff("speedup_self", "Speedup (vs self p=1)", f"compare_strong_speedup_vs_self_{title_tag}.png", ideal="p")
+        _plot_speed_eff("efficiency_self", "Efficiency (vs self p=1)", f"compare_strong_efficiency_vs_self_{title_tag}.png", ideal="1")
+
+    def plot_compare_weak(base_n: int, iters: int, ms: List[Dict[str, object]]) -> None:
+        omp = [m for m in ms if m["version"] == "openmp"]
+        mpi = [m for m in ms if m["version"] == "mpi"]
+
+        if len({int(m["p"]) for m in omp + mpi}) < 2:
+            return
+
+        t_base_seq = float(ms[0].get("T_seq1_s", ms[0].get("T_base_s", 0.0)))
+        title_tag = f"base{base_n}_it{iters}"
+
+        # Time (ideal is constant time at baseline)
         plt.figure()
-        plt.plot(ps, effs, marker="o")
+        if omp:
+            x, y = _series(omp, "time_s")
+            plt.plot(x, y, marker="o", label="OpenMP")
+        if mpi:
+            x, y = _series(mpi, "time_s")
+            plt.plot(x, y, marker="o", label="MPI")
+        if t_base_seq > 0:
+            plt.axhline(t_base_seq, linestyle="--", linewidth=1.0, label="ideal (constant time)")
         plt.xlabel("p (threads or MPI processes)")
-        plt.ylabel("Efficiency")
-        plt.title(f"{version} {mode} efficiency: {title_tag}")
-        plt.ylim(0.0, eff_top)
+        plt.ylabel("Execution time (s)")
+        plt.title(f"Weak scaling time: {title_tag} (n_bats = base * p)")
         plt.grid(True, alpha=0.3)
-        plt.savefig(os.path.join(outdir, f"{version}_{mode}_efficiency_{title_tag}.png"), dpi=150, bbox_inches="tight")
+        plt.legend()
+        plt.savefig(os.path.join(outdir, f"compare_weak_time_{title_tag}.png"), dpi=150, bbox_inches="tight")
         plt.close()
 
-    # Grouping:
-    # - Strong scaling: fixed (n_bats, iters)
-    # - Weak scaling: fixed (baseline_n_bats, iters) while n_bats changes with p
-    groups: Dict[Tuple[str, str, str], List[Dict[str, object]]] = {}
+        def _plot_eff(ykey: str, ylabel: str, filename: str) -> None:
+            plt.figure()
+            if omp:
+                x, y = _series(omp, ykey)
+                plt.plot(x, y, marker="o", label="OpenMP")
+            if mpi:
+                x, y = _series(mpi, ykey)
+                plt.plot(x, y, marker="o", label="MPI")
+            x_ideal = sorted({int(m["p"]) for m in omp + mpi})
+            if x_ideal:
+                plt.plot(x_ideal, [1.0 for _ in x_ideal], linestyle="--", label="ideal")
+            plt.xlabel("p (threads or MPI processes)")
+            plt.ylabel(ylabel)
+            plt.title(f"Weak scaling efficiency: {title_tag}")
+            plt.grid(True, alpha=0.3)
+            plt.legend()
+            plt.savefig(os.path.join(outdir, filename), dpi=150, bbox_inches="tight")
+            plt.close()
+
+        _plot_eff("efficiency_seq", "Weak efficiency (vs sequential p=1)", f"compare_weak_efficiency_vs_seq_{title_tag}.png")
+        _plot_eff("efficiency_self", "Weak efficiency (vs self p=1)", f"compare_weak_efficiency_vs_self_{title_tag}.png")
+
+    # Build comparison groups
+    strong_groups: Dict[Tuple[int, int], List[Dict[str, object]]] = {}
+    weak_groups: Dict[Tuple[int, int], List[Dict[str, object]]] = {}
+
     for m in metrics:
         mode = str(m.get("mode", "strong"))
-        version = str(m["version"])
-        iters = int(m["iters"])
         if mode == "strong":
-            n_bats = int(m["n_bats"])
-            title_tag = f"nbats{n_bats}_it{iters}"
+            key = (int(m["n_bats"]), int(m["iters"]))
+            strong_groups.setdefault(key, []).append(m)
         else:
-            base_n = int(m.get("baseline_n_bats", m["n_bats"]))
-            title_tag = f"base{base_n}_it{iters}"
+            key = (int(m.get("baseline_n_bats", m["n_bats"])), int(m["iters"]))
+            weak_groups.setdefault(key, []).append(m)
 
-        key = (mode, version, title_tag)
-        groups.setdefault(key, []).append(m)
+    for (n_bats, iters), ms in sorted(strong_groups.items()):
+        plot_compare_strong(n_bats, iters, ms)
 
-    for (mode, version, title_tag), ms in groups.items():
-        if version == "sequential":
-            continue
-        plot_group(mode, version, title_tag, ms)
+    for (base_n, iters), ms in sorted(weak_groups.items()):
+        plot_compare_weak(base_n, iters, ms)
 
 
 def main() -> None:
@@ -399,8 +512,14 @@ def main() -> None:
                 "time_s",
                 "baseline_n_bats",
                 "T_base_s",
+                "T_seq1_s",
+                "T_self1_s",
                 "speedup",
                 "efficiency",
+                "speedup_seq",
+                "efficiency_seq",
+                "speedup_self",
+                "efficiency_self",
             ],
         )
         w.writeheader()

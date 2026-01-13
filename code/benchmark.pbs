@@ -24,21 +24,22 @@ module load mpi4py || true
 
 NBATS_STRONG=2000
 ITERS_STRONG=5000
+SEED=1
 
 echo "=== Strong scaling (fixed n_bats, fixed iters) ==="
 echo "--- Sequential baseline ---"
-./sequential --n-bats "$NBATS_STRONG" --iters "$ITERS_STRONG" --quiet --no-snapshot
+./sequential --n-bats "$NBATS_STRONG" --iters "$ITERS_STRONG" --seed "$SEED" --quiet --no-snapshot
 
 echo "--- OpenMP strong scaling ---"
 for t in 1 2 4 8; do
   export OMP_NUM_THREADS=$t
-  ./openmp_bat --n-bats "$NBATS_STRONG" --iters "$ITERS_STRONG" --quiet
+  ./openmp_bat --n-bats "$NBATS_STRONG" --iters "$ITERS_STRONG" --seed "$SEED" --quiet
 done
 
 echo "--- MPI strong scaling ---"
 for p in 1 2 4 8; do
   # keep n_bats divisible by p
-  mpiexec -n $p ./mpi_bat --n-bats "$NBATS_STRONG" --iters "$ITERS_STRONG" --quiet
+  mpiexec -n $p ./mpi_bat --n-bats "$NBATS_STRONG" --iters "$ITERS_STRONG" --seed "$SEED" --quiet
 done
 
 echo "=== Weak scaling (n_bats proportional to p) ==="
@@ -47,19 +48,19 @@ BASE_PER_WORKER=500
 
 # Sequential baseline for weak scaling: use p=1 case
 NBATS_WEAK_1=$BASE_PER_WORKER
-./sequential --n-bats "$NBATS_WEAK_1" --iters "$ITERS_WEAK" --quiet --no-snapshot
+./sequential --n-bats "$NBATS_WEAK_1" --iters "$ITERS_WEAK" --seed "$SEED" --quiet --no-snapshot
 
 echo "--- OpenMP weak scaling ---"
 for t in 1 2 4 8; do
   export OMP_NUM_THREADS=$t
   NB=$((BASE_PER_WORKER * t))
-  ./openmp_bat --n-bats "$NB" --iters "$ITERS_WEAK" --quiet
+  ./openmp_bat --n-bats "$NB" --iters "$ITERS_WEAK" --seed "$SEED" --quiet
 done
 
 echo "--- MPI weak scaling ---"
 for p in 1 2 4 8; do
   NB=$((BASE_PER_WORKER * p))
-  mpiexec -n $p ./mpi_bat --n-bats "$NB" --iters "$ITERS_WEAK" --quiet
+  mpiexec -n $p ./mpi_bat --n-bats "$NB" --iters "$ITERS_WEAK" --seed "$SEED" --quiet
 done
 
 echo "Finished at: $(date)"

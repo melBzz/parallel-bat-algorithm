@@ -2,6 +2,7 @@
 #include <math.h>
 #include "bat.h"
 #include "bat_utils.h"
+#include "bat_rng.h"
 
 /*
  * Shared algorithm core used by sequential / OpenMP / MPI front-ends.
@@ -23,14 +24,21 @@ static double compute_A_mean(Bat bats[], int n_bats) {
 /* 
  * Initialize the bat population and find an initial best bat 
  */
-void initialize_bats(Bat bats[], int n_bats, Bat *best_bat) {
-    /* Initialize bats with random positions and default parameters. */
+void initialize_bats_seeded(Bat bats[], int n_bats, Bat *best_bat, uint32_t seed) {
+    /*
+     * Initialize bats with deterministic, per-bat RNG state.
+     * This makes runs comparable across sequential/OpenMP/MPI.
+     */
     for (int i = 0; i < n_bats; i++) {
+
+        /* Each bat gets its own RNG stream. */
+        bats[i].rng_state = bat_rng_init(seed, (uint32_t)i);
+        uint32_t *rng = &bats[i].rng_state;
 
         // x_i and v_i
         for (int d = 0; d < dimension; d++) {
             /* Position starts uniform in [Lb, Ub] (here: [-5, 5]). */
-            bats[i].x_i[d] = uniform_random(-5.0, 5.0);
+            bats[i].x_i[d] = bat_rng_uniform(rng, -5.0, 5.0);
             bats[i].v_i[d] = V0;
         }
 
@@ -55,13 +63,21 @@ void initialize_bats(Bat bats[], int n_bats, Bat *best_bat) {
     *best_bat = bats[best_index];  // copy best bat
 }
 
+void initialize_bats(Bat bats[], int n_bats, Bat *best_bat) {
+    /* Backward-compatible wrapper (used by older code paths). */
+    initialize_bats_seeded(bats, n_bats, best_bat, 1u);
+}
+
 /* 
  * Update bat logic 
  */
 void update_bat(Bat bats[], int n_bats, const Bat *best_bat, int i, int t) {
+
+    /* Use the RNG state owned by this bat (thread-safe). */
+    uint32_t *rng = &bats[i].rng_state;
     
     // 1. Update frequency
-    double beta = uniform_random(0.0, 1.0);
+    double beta = bat_rng_uniform01(rng);
     bats[i].f_i = F_MIN + (F_MAX - F_MIN) * beta;
 
     // 2. Update velocity (towards best solution)
@@ -89,7 +105,7 @@ void update_bat(Bat bats[], int n_bats, const Bat *best_bat, int i, int t) {
     /* Evaluate the candidate obtained from the global move. */
     double Fnew = objective_function(candidate_x);
 
-    double rand_pulse = uniform_random(0.0, 1.0);
+    double rand_pulse = bat_rng_uniform01(rng);
     if (rand_pulse > bats[i].r_i) {
 
         double local_x[dimension];
@@ -98,7 +114,7 @@ void update_bat(Bat bats[], int n_bats, const Bat *best_bat, int i, int t) {
 
         // local random walk around global best
         for (int d = 0; d < dimension; d++) {
-            double eps = normal_random(0.0, 1.0);       // randn(1,d)
+            double eps = bat_rng_normal(rng, 0.0, 1.0);
             local_x[d] = best_bat->x_i[d] + 0.1 * eps * A_mean;
 
             /* Clamp the local candidate to bounds. */
@@ -118,7 +134,7 @@ void update_bat(Bat bats[], int n_bats, const Bat *best_bat, int i, int t) {
     }
 
     // ----- Acceptance by loudness (for this bat) -----
-    double rand_loud = uniform_random(0.0, 1.0);
+    double rand_loud = bat_rng_uniform01(rng);
 
     if ((Fnew > bats[i].f_value) && (rand_loud < bats[i].A_i)) {
         // accept candidate as new position of bat i

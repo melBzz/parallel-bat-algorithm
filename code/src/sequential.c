@@ -68,8 +68,6 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    srand(seed);
-
     Bat *bats = malloc((size_t)n_bats * sizeof(Bat));
     if (!bats) {
         perror("malloc bats");
@@ -77,7 +75,7 @@ int main(int argc, char **argv) {
     }
 
     Bat best_bat;
-    initialize_bats(bats, n_bats, &best_bat);
+    initialize_bats_seeded(bats, n_bats, &best_bat, (uint32_t)seed);
 
     struct timespec t0, t1;
     clock_gettime(CLOCK_MONOTONIC, &t0);

@@ -1,6 +1,8 @@
 #ifndef BAT_H
 #define BAT_H
 
+#include <stdint.h>
+
 #define dimension 2
 
 /* Default values (can be overridden at runtime via CLI options). */
@@ -27,6 +29,9 @@ typedef struct {
     double A_i;
     double r_i;
     double f_value;
+
+    /* Per-bat RNG state (makes OpenMP/MPI runs deterministic and thread-safe). */
+    uint32_t rng_state;
 } Bat;
 
 /* Core Bat Algorithm functions (implemented in src/bat_core.c).
@@ -34,5 +39,8 @@ typedef struct {
  */
 void initialize_bats(Bat bats[], int n_bats, Bat *best_bat);
 void update_bat(Bat bats[], int n_bats, const Bat *best_bat, int i, int t);
+
+/* Deterministic initializer used by all front-ends. */
+void initialize_bats_seeded(Bat bats[], int n_bats, Bat *best_bat, uint32_t seed);
 
 #endif

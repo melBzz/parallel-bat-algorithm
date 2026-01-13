@@ -4,6 +4,7 @@ venv/
 env/
 __pycache__/
 bench_out/
+bench_out_compare/
 
 # Files #
 code/sequential

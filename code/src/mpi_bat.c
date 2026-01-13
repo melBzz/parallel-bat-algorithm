@@ -78,14 +78,17 @@ int main(int argc, char *argv[]) {
 
     Bat local_best, global_best;
 
-    /* Different seed per rank (so ranks do not generate the same random numbers) */
-    srand(seed + (unsigned int)rank * 100U);
+    /*
+     * Deterministic seed:
+     * Rank 0 initializes the full population, including per-bat RNG states.
+     * Those states are then scattered with the Bat structs.
+     */
 
     /* ---------- Initialization ---------- */
     if (rank == 0) {
         /* Rank 0 creates and initializes the full population */
         all_bats = malloc((size_t)n_bats * sizeof(Bat));
-        initialize_bats(all_bats, n_bats, &global_best);
+        initialize_bats_seeded(all_bats, n_bats, &global_best, (uint32_t)seed);
     }
 
     /* Split the population: each rank receives local_n bats in local_bats[] */
