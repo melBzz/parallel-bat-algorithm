@@ -12,3 +12,5 @@ code/sequential.exe
 code/openmp_bat
 *.csv
 *.o
+report/report.md
+report/report_fr.md
