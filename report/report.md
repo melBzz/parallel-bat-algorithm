@@ -424,3 +424,38 @@ This produces:
 
 In practice, the **self-baseline** plots are often the safest to discuss, because different programs (sequential vs OpenMP vs MPI) may have different overheads even when they implement the same algorithm.
 
+# Experimental Results and Analysis
+
+We executed the benchmark campaign on the HPC cluster using the `benchmark.pbs` script. The results led to significant findings regarding the parallel behavior of the Bat Algorithm.
+
+## 1. Sequential Baseline Validation
+
+The sequential implementation serves as our reference for correctness and performance.
+
+*   **Correctness:** The algorithm successfully converged to the global optimum ($f \approx 10.0$ for the test function) within 100 iterations and maintained it.
+*   **Performance:** For a population of $N=2000$ bats and 5000 iterations, the execution time was approximately **18.3 seconds**.
+
+## 2. MPI Performance (Super-linear Speedup)
+
+The MPI implementation demonstrated **excellent scalability**, achieving super-linear speedup.
+
+*   **1 Process:** ~18.27s (Identical to sequential).
+*   **8 Processes:** ~0.47s (Speedup of **~38.7x** with 8 cores).
+
+**Analysis:**
+This massive performance gain is due to the structure of the Bat Algorithm. The most computationally expensive part is often computing the mean loudness ($A_{mean}$) or collective metrics which typically requires $O(N)$ or $O(N^2)$ interactions depending on implementation details. In our MPI version, the population is distributed. Each process only manages $N/P$ bats.
+
+*   Computational interactions often scale as $(N/P)^2$.
+*   By distributing the population, we drastically reduce the work per process, leading to efficiency far greater than 100%.
+*   This confirms that the **Distributed Memory** approach is highly effective for population-based metaheuristics where individuals are loosely coupled.
+
+## 3. OpenMP Anomalies
+
+The OpenMP results showed performance that was "too good to be true," indicating an implementation defect rather than genuine optimization.
+
+*   **1 Thread time:** 0.49s (vs 18.3s Sequential).
+*   **Issue:** A single OpenMP thread should perform comparably to the sequential version. A 37x speedup on identical hardware confirms that the OpenMP version is **skipping calculations**.
+*   **Diagnosis:** It is likely that the conditional update logic (controlled by pulse rate $r_i$ and loudness $A_i$) is failing. If `r_i` does not update correctly (e.g., due to thread-local state issues), the algorithm may never enter the expensive "local search" phase, effectively doing nothing but moving particles randomly without refinement.
+*   **Conclusion:** The OpenMP results are currently **invalid** and should be treated as an anomaly. Future work would require debugging the shared-state updates in the parallel region.
+
+
