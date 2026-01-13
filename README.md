@@ -199,7 +199,7 @@ Direct execution on the login node is discouraged for heavy computations. Use th
   sudo apt install python3-matplotlib # Linux distributions (or use a virtual environment)
   ```
 
-## 🎲 About Randomness (and “Xorshift32”)
+## 🎲 About Randomness
 
 The Bat Algorithm is **stochastic** (it uses random numbers), so for benchmarking we need the random number generation to be:
 - **deterministic** (same seed = same run)
@@ -222,3 +222,20 @@ This makes sequential/OpenMP/MPI runs comparable and stable.
 - **MPI**: Uses `MPI_Scatter` to distribute bats among processes. Uses `MPI_Allreduce` with `MPI_MAXLOC` to find the global best fitness and its owner efficiently.
 
 For fairness and reproducibility, all versions initialize the population using a fixed `--seed` value and the same deterministic per-bat RNG.
+
+## 👥 Authors
+
+*   **Wail Ameur**
+*   **Bénie Nshimirimana**
+
+## 🎓 Course Information
+
+This project was developed for the **High-Performance Computing for Data Science** course at the **University of Trento**.
+
+*   **Program:** EIT Digital Master School
+*   **Date:** January 2026
+
+## 📜 License
+
+This project is open-source and available under the MIT License.
+

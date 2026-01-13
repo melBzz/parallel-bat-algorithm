@@ -8,6 +8,19 @@
 #include "bat_utils.h"
 
 /*
+ * Sequential version of the Bat Algorithm.
+ *
+ * Idea:
+ * - We allocate a single array `bats[]` to hold the entire population.
+ * - The algorithm runs in a single thread, iteratively updating each bat.
+ * - In each iteration:
+ *   1. Each bat's position and velocity are updated based on the global best.
+ *   2. A local search is performed probabilistically.
+ *   3. The global best solution is re-evaluated after all bats have moved.
+ * - This version serves as the baseline for performance comparisons (speedup/efficiency).
+ */
+
+/*
  * Snapshot helper:
  * Writes the current bat positions (one bat per line) to a CSV file.
  * This is useful for plotting the swarm evolution.
@@ -68,6 +81,7 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    /* Allocate memory for the entire population of bats */
     Bat *bats = malloc((size_t)n_bats * sizeof(Bat));
     if (!bats) {
         perror("malloc bats");
@@ -75,15 +89,20 @@ int main(int argc, char **argv) {
     }
 
     Bat best_bat;
+    /* Initialize the population with random positions and find the initial best solution */
     initialize_bats_seeded(bats, n_bats, &best_bat, (uint32_t)seed);
 
+    /* Start timing the execution */
     struct timespec t0, t1;
     clock_gettime(CLOCK_MONOTONIC, &t0);
 
+    /* Main optimization loop */
     for (int t = 0; t < max_iters; t++) {
 
         /* Use the best solution from the previous iteration as a read-only guide */
         Bat best_snapshot = best_bat;
+        
+        /* Update each bat in the population sequentially */
         for (int i = 0; i < n_bats; i++) {
             update_bat(bats, n_bats, &best_snapshot, i, t);
         }
@@ -119,6 +138,7 @@ int main(int argc, char **argv) {
         }
     }
 
+    /* Stop timing */
     clock_gettime(CLOCK_MONOTONIC, &t1);
     double elapsed = seconds_since(&t0, &t1);
 
@@ -131,7 +151,7 @@ int main(int argc, char **argv) {
         printf(")\n");
     }
 
-    /* Machine-readable benchmark line */
+    /* Output benchmark result in a machine-readable format */
     printf("BENCH version=sequential n_bats=%d iters=%d procs=1 threads=1 time_s=%.6f\n",
            n_bats, max_iters, elapsed);
 
