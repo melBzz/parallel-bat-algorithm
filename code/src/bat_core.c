@@ -5,6 +5,20 @@
 #include "bat_rng.h"
 
 /*
+ * bat_core.c
+ *
+ * Purpose:
+ * Implement the core logic of the Bat Algorithm.
+ * This file defines how bats are initialized, how they move and explore
+ * the search space at each iteration, and how candidate solutions are
+ * evaluated and accepted.
+ *
+ * The functions in this file operate only on the bat data structures
+ * and do not handle timing, parallel execution, or input/output.
+ */
+
+ 
+/*
  * Shared algorithm core used by sequential / OpenMP / MPI front-ends.
  *
  * Important design choice:
