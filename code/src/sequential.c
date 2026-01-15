@@ -20,11 +20,22 @@
  * - This version serves as the baseline for performance comparisons (speedup/efficiency).
  */
 
+
+/* ----------------------------------------------------------------- */
+
+
 /*
- * Snapshot helper:
- * Writes the current bat positions (one bat per line) to a CSV file.
- * This is useful for plotting the swarm evolution.
+ * Writes the positions of all bats to a CSV file.
+ * Each line corresponds to one bat and contains its position coordinates.
+ * Used only for visualization of the swarm evolution.
+ 
+  * Parameters:
+ *   - filename : name of the output CSV file
+ *   - bats     : array containing the current bat population
+ *   - n_bats   : number of bats in the population
  */
+ */
+
 static void save_snapshot(const char *filename, Bat bats[], int n_bats) {
     FILE *fp = fopen(filename, "w");
     if (!fp) {
@@ -42,19 +53,41 @@ static void save_snapshot(const char *filename, Bat bats[], int n_bats) {
     fclose(fp);
 }
 
-/* ----------------------------------------------------------------- */
+/*
+ * Computes the elapsed time in seconds between two timestamps.
+ *
+ * Parameters:
+ *   - start : starting timestamp
+ *   - end   : ending timestamp
+ */
 
 static double seconds_since(const struct timespec *start, const struct timespec *end) {
     return (double)(end->tv_sec - start->tv_sec) + 1e-9 * (double)(end->tv_nsec - start->tv_nsec);
 }
 
+/*
+ * Parses command-line arguments and sets execution parameters.
+ *
+ * Parameters:
+ *   - argc        : number of command-line arguments
+ *   - argv        : array of command-line arguments
+ *   - n_bats      : number of bats in the population
+ *   - max_iters   : maximum number of iterations
+ *   - seed        : random seed
+ *   - do_snapshot : enable or disable snapshots
+ *   - quiet       : enable or disable console output
+ */
+
 static void parse_args(int argc, char **argv, int *n_bats, int *max_iters, unsigned int *seed, int *do_snapshot, int *quiet) {
+
+    // Initialize default execution parameters 
     *n_bats = N_BATS;
     *max_iters = MAX_ITERS;
     *seed = (unsigned int)time(NULL);
     *do_snapshot = 1;
     *quiet = 0;
-
+    
+    // Parse command-line arguments
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--n-bats") == 0 && i + 1 < argc) {
             *n_bats = atoi(argv[++i]);
