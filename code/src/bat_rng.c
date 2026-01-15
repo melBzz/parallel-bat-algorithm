@@ -6,24 +6,30 @@
 /*
  * bat_rng.c
  *
- * Goal : give each Bat its own small random number generator.
+ * Purpose:
+ * Provide each bat with its own independent pseudo-random number generator.
  *
- * Why:
- * - The standard C function rand() uses shared global state.
- * - With OpenMP, multiple threads calling rand() can corrupt that state or
- *   produce unpredictable sequences.
- * - Unpredictable randomness changes the algorithm path and can also change how
- *   much work is done (more/less local search), which makes benchmarks unfair.
+ * Motivation:
+ * The standard C function rand() relies on a shared global state.
+ * In parallel contexts (OpenMP, MPI), this leads to race conditions,
+ * non-reproducible behavior, and execution paths that depend on scheduling.
+ * Such effects make results difficult to compare and invalidate benchmarks.
  *
- * Our solution:
- * - Store one RNG state (a 32-bit integer) inside each Bat.
- * - Update that state whenever we need a random number.
- * - This makes runs reproducible, thread-safe, and comparable across
- *   sequential / OpenMP / MPI.
+ * Design:
+ * - Each bat stores its own RNG state (a 32-bit integer).
+ * - This state is initialized once using a global seed and the bat index.
+ * - All random draws update only the bat’s own state.
  *
- * Important: this RNG is for simulation/benchmarking ONLY.
- * It is NOT cryptographically secure.
+ * Guarantees:
+ * - Deterministic behavior when using the same seed.
+ * - Independence between bats.
+ * - Identical behavior across sequential, OpenMP, and MPI executions.
+ *
+ * Note:
+ * This RNG is intended for simulation and benchmarking purposes only.
+ * It is not designed for cryptographic use.
  */
+
 
 /*
  * Mixes a 32-bit value to produce a well-scrambled result.
